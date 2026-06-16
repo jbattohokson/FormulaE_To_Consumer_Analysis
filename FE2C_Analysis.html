@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FE2C Optimization Engine</title>
+<style>
+  :root{--ink:#0f1117;--ink-light:#4a4f5e;--border:#dde1ea;--bg:#f7f8fc;--white:#ffffff;--accent:#1a56db;--accent-dim:#e8eefb;--warn:#c0392b;--warn-dim:#fdf0ee;--green:#1a7f4b;--green-dim:#eaf5ef;--amber:#b45309;--amber-dim:#fef3e2;--mono:'Courier New',Courier,monospace}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Georgia',serif;font-size:16px;line-height:1.7;color:var(--ink);background:var(--bg)}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+  .page-wrap{max-width:860px;margin:0 auto;padding:0 24px 80px}
+  header{background:#0a1628;color:var(--white);padding:56px 0 44px}
+  header .page-wrap{padding-top:0;padding-bottom:0}
+  .eyebrow{font-family:'Arial',sans-serif;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#5d8fc9;margin-bottom:14px}
+  h1{font-size:clamp(24px,4vw,38px);font-weight:normal;line-height:1.2;letter-spacing:-.02em;margin-bottom:18px}
+  h1 em{font-style:italic;color:#5d8fc9}
+  .meta{font-family:'Arial',sans-serif;font-size:13px;color:#5d8fc9;display:flex;flex-wrap:wrap;gap:20px}
+  .meta span::before{content:'-- '}
+  .sticky-nav{position:sticky;top:0;background:var(--white);border-bottom:1px solid var(--border);z-index:100;padding:10px 0}
+  .sticky-nav .page-wrap{display:flex;gap:24px;flex-wrap:wrap;padding-top:0;padding-bottom:0}
+  .sticky-nav a{font-family:'Arial',sans-serif;font-size:12.5px;color:var(--ink-light);font-weight:500}
+  .sticky-nav a:hover{color:var(--accent);text-decoration:none}
+  .exec-summary{background:var(--white);border:1px solid var(--border);border-left:4px solid var(--accent);padding:28px 32px;margin:40px 0 48px;border-radius:0 6px 6px 0}
+  .exec-summary h2{font-family:'Arial',sans-serif;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+  .exec-summary p{font-size:15.5px;margin-bottom:10px}
+  .exec-summary p:last-child{margin-bottom:0}
+  .status-banner{background:var(--amber-dim);border:1px solid var(--amber);border-radius:6px;padding:14px 18px;margin-bottom:32px;font-family:'Arial',sans-serif;font-size:13px;color:var(--amber)}
+  .status-banner strong{font-weight:700}
+  .kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:16px;margin-bottom:56px}
+  .kpi{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:20px 18px;text-align:center}
+  .kpi .num{font-size:22px;font-weight:700;font-family:'Arial',sans-serif;letter-spacing:-.03em;line-height:1;margin-bottom:6px}
+  .kpi .num.warn{color:var(--warn)}.kpi .num.good{color:var(--green)}.kpi .num.amber{color:var(--amber)}.kpi .num.blue{color:var(--accent)}
+  .kpi .label{font-family:'Arial',sans-serif;font-size:11.5px;color:var(--ink-light);line-height:1.4}
+  .section{margin-bottom:56px}
+  .section-label{font-family:'Arial',sans-serif;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-light);margin-bottom:6px}
+  h2.section-title{font-size:22px;font-weight:normal;letter-spacing:-.01em;margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+  .finding{background:var(--white);border:1px solid var(--border);border-radius:8px;margin-bottom:20px;overflow:hidden}
+  .finding-header{display:flex;align-items:flex-start;gap:16px;padding:22px 24px 18px;border-bottom:1px solid var(--border)}
+  .finding-number{font-family:'Arial',sans-serif;font-size:11px;font-weight:700;color:var(--white);background:var(--ink);border-radius:4px;padding:3px 7px;flex-shrink:0;margin-top:2px}
+  .finding-title{font-size:16.5px;font-weight:normal;line-height:1.35}
+  .finding-body{padding:20px 24px}
+  .finding-body p{font-size:14.5px;margin-bottom:12px}
+  .finding-body p:last-child{margin-bottom:0}
+  .impact-block{border-radius:6px;padding:16px 18px;margin-top:14px;margin-bottom:14px}
+  .impact-block.red{background:var(--warn-dim);border-left:3px solid var(--warn)}
+  .impact-block.green{background:var(--green-dim);border-left:3px solid var(--green)}
+  .impact-block.amber{background:var(--amber-dim);border-left:3px solid var(--amber)}
+  .impact-block.blue{background:var(--accent-dim);border-left:3px solid var(--accent)}
+  .impact-label{font-family:'Arial',sans-serif;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+  .impact-block.red .impact-label{color:var(--warn)}.impact-block.green .impact-label{color:var(--green)}
+  .impact-block.amber .impact-label{color:var(--amber)}.impact-block.blue .impact-label{color:var(--accent)}
+  .impact-block p{font-size:14px;line-height:1.6;margin:0}
+  .data-table-wrap{overflow-x:auto;margin:16px 0}
+  table{width:100%;border-collapse:collapse;font-family:'Arial',sans-serif;font-size:13px}
+  th{background:var(--ink);color:var(--white);text-align:left;padding:9px 12px;font-weight:600;font-size:12px;letter-spacing:.04em}
+  td{padding:9px 12px;border-bottom:1px solid var(--border)}
+  tr:last-child td{border-bottom:none}
+  tr:nth-child(even) td{background:var(--bg)}
+  .gen-table td:first-child{font-family:var(--mono);font-size:12px}
+  .arch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
+  .arch-card{background:var(--white);border:1px solid var(--border);border-radius:6px;padding:14px}
+  .arch-card .layer{font-family:'Arial',sans-serif;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin-bottom:6px}
+  .arch-card h3{font-size:14px;font-weight:normal;margin-bottom:6px}
+  .arch-card p{font-family:'Arial',sans-serif;font-size:12px;color:var(--ink-light);line-height:1.5}
+  footer{border-top:1px solid var(--border);padding-top:28px;margin-top:64px;font-family:'Arial',sans-serif;font-size:12.5px;color:var(--ink-light);display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px}
+  @media(max-width:600px){.exec-summary{padding:20px 18px}.finding-header,.finding-body{padding:16px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="page-wrap">
+    <p class="eyebrow">Motorsport-to-Market Analytics -- EV Battery Research</p>
+    <h1>Formula E is not a race series.<br><em>It is a live laboratory for battery R&amp;D.</em></h1>
+    <div class="meta">
+      <span>Julian Batto-Hokson</span>
+      <span>Formula E Gen 1 to Gen 3, Lucid Motors, California EV registrations</span>
+      <span>Python, SQLite, ChromaDB, Claude API, dbt</span>
+      <span>2026</span>
+    </div>
+  </div>
+</header>
+<nav class="sticky-nav"><div class="page-wrap"><a href="#summary">Summary</a><a href="#thesis">Thesis</a><a href="#architecture">Architecture</a><a href="#findings">Findings</a><a href="#data">Data</a></div></nav>
+<div class="page-wrap">
+<div class="status-banner" style="margin-top:32px"><strong>Project Status:</strong> This is an active research and engineering project. The pipeline, database schema, and agentic query layer are built and functional. The analytical outputs described in this document are produced by the live system. Where proxy metrics substitute for unavailable telemetry, the substitution is documented explicitly.</div>
+<section id="summary" class="exec-summary">
+  <h2>Executive Summary</h2>
+  <p>Formula E's core constraint -- a hard energy cap per race -- makes every race a controlled experiment in battery management. Teams that win by consuming less energy than rivals have demonstrated a transferable battery management insight. Teams that win by raw pace alone have demonstrated a setup advantage. This project separates those two signals.</p>
+  <p>Lucid Motors is the direct application case. As powertrain supplier to the Mahindra Formula E team, Lucid sits at a rare intersection: the same engineering team optimizing regen recovery and thermal management under race conditions also designed the Air Sapphire's 300 Wh/kg cell architecture. The FE2C framework quantifies that transfer across three generations of Formula E battery technology.</p>
+  <p>The central analytical question for California EV buyers: does battery density (larger pack, longer range buffer) or recovery efficiency (better regen, lighter pack) produce more real-world range improvement? Formula E's generational data -- where competitive pressure compressed development cycles that would take years in consumer contexts -- gives a data-driven answer.</p>
+</section>
+<div class="kpi-strip">
+  <div class="kpi"><div class="num blue">Gen 1-3</div><div class="label">Three battery generations analyzed: 28 kWh to Gen 3 regen-focused architecture</div></div>
+  <div class="kpi"><div class="num good">300 Wh/kg</div><div class="label">Lucid cell energy density -- exceeds most competitors at market</div></div>
+  <div class="kpi"><div class="num amber">250 kW</div><div class="label">Gen 3 front axle regeneration -- the technical basis for the regen efficiency analysis</div></div>
+  <div class="kpi"><div class="num blue">3 layers</div><div class="label">Agentic RAG pipeline: SQLite star schema, ChromaDB vector store, Claude tool-use agent</div></div>
+  <div class="kpi"><div class="num good">8</div><div class="label">Custom agent tools covering circuit analysis, efficiency scoring, CA market simulation</div></div>
+  <div class="kpi"><div class="num amber">CA DMV</div><div class="label">California registration data used to correlate racing innovation timelines with EV adoption</div></div>
+</div>
+<section id="thesis" class="section">
+  <p class="section-label">Research Thesis</p>
+  <h2 class="section-title">Why Formula E data can inform consumer EV decisions</h2>
+  <div class="finding">
+    <div class="finding-header"><span class="finding-number">01</span><span class="finding-title">Every Formula E race is a controlled battery experiment</span></div>
+    <div class="finding-body">
+      <p>Unlike combustion motorsports where fuel consumption is an efficiency target, Formula E teams face hard energy caps that function like a fixed battery charge. Exceeding allocated energy means slowing down or disqualification. This constraint forces battery management optimization in a high-stakes environment where the cost of inefficiency is immediate and measurable.</p>
+      <div class="data-table-wrap"><table class="gen-table">
+        <thead><tr><th>Generation</th><th>Battery Capability</th><th>Consumer EV Parallel</th></tr></thead>
+        <tbody>
+          <tr><td>Gen 1 (2014-2017)</td><td>~28 kWh -- teams swapped cars mid-race</td><td>Energy density baseline -- proof of concept only</td></tr>
+          <tr><td>Gen 2 (2018-2020)</td><td>~54 kWh -- full race on single charge achieved</td><td>Range anxiety addressed for short-route EV use</td></tr>
+          <tr><td>Gen 3 (2023-present)</td><td>Focus shifts to charge speed, lighter packs, active thermal management</td><td>Aligns with consumer priorities: fast charging, range per kg</td></tr>
+        </tbody>
+      </table></div>
+      <div class="impact-block blue"><p class="impact-label">What this suggests for EV product teams</p><p>Gen 3's design philosophy shift from energy density to recovery efficiency is a direct signal about where battery R&D ROI is moving. The competitive pressure in Formula E compressed that shift into a single regulation cycle. Consumer EV teams tracking this transition have a leading indicator for where cell engineering investment should be directed in the 2025-2028 window.</p></div>
+    </div>
+  </div>
+  <div class="finding">
+    <div class="finding-header"><span class="finding-number">02</span><span class="finding-title">The density vs. recovery question has a California-specific answer</span></div>
+    <div class="finding-body">
+      <p>California presents two distinct EV stress environments that test different parts of the density vs. recovery question. The Inland Empire and Central Valley have high ambient temperatures (thermal management stress), stop-and-go traffic on I-10 and SR-99 (regen opportunity density), and sparse charging infrastructure (range buffer value). Bay Area and LA Metro have dense regen cycles but shorter average trip distances and higher charging frequency tolerance.</p>
+      <div class="impact-block green"><p class="impact-label">What the simulation produces</p><p>Dense urban areas (LA Metro, Bay Area) favor recovery efficiency -- more regen opportunities per mile and shorter trips where range buffer matters less than charging flexibility. Rural and exurban areas (Central Valley, Inland Empire) favor density -- fewer regen opportunities and larger distances between charging infrastructure make the range buffer more valuable. The FE2C simulation produces a ZIP-code-level recommendation map using CA DMV registration data weighted by these environmental factors.</p></div>
+    </div>
+  </div>
+</section>
+<section id="architecture" class="section">
+  <p class="section-label">System Architecture</p>
+  <h2 class="section-title">Three-layer agentic pipeline</h2>
+  <div class="arch-grid">
+    <div class="arch-card"><p class="layer">Layer 1 -- Structured Data</p><h3>SQLite star schema</h3><p>Fact table: race stints. Dimensions: battery hardware (Gen 1/2/3), track profile, manufacturer, environment. dbt layer enforces data quality: no negative lap times, energy proxies within declared capacity bounds, environmental completeness checks.</p></div>
+    <div class="arch-card"><p class="layer">Layer 2 -- Semantic Search</p><h3>ChromaDB vector store</h3><p>Formula E technical documentation, FIA regulations, and Lucid engineering publications embedded and indexed. Allows the agent to answer questions that require qualitative technical context alongside quantitative race data.</p></div>
+    <div class="arch-card"><p class="layer">Layer 3 -- Agent</p><h3>Claude tool-use agent</h3><p>8 custom tools covering circuit efficiency scoring, Delta-E calculation, regen opportunity indexing, cold-start circuit prediction, CA market simulation, and strategy recommendation by county. Answers multi-hop analytical questions against both layers simultaneously.</p></div>
+  </div>
+  <div class="impact-block blue"><p class="impact-label">Architecture rationale</p><p>Formula E does not publish lap-level energy telemetry publicly. Proxy metrics are engineered from lap times, sector deltas, and gap data. The dbt quality layer documents every proxy assumption explicitly -- the same standard production analytics environments use when perfect data does not exist. Every metric in the analysis distinguishes between measured data and engineered proxy.</p></div>
+</section>
+<section id="findings" class="section">
+  <p class="section-label">Core Metrics</p>
+  <h2 class="section-title">How efficiency is measured in this framework</h2>
+  <div class="finding">
+    <div class="finding-header"><span class="finding-number">M1</span><span class="finding-title">Delta-E Score -- efficient battery management vs. costly position gains</span></div>
+    <div class="finding-body">
+      <p>Delta-E = Energy Consumed (proxy) vs. Positions Gained, calculated per stint using SQL window functions against the race average. A negative Delta-E indicates a team gained positions while consuming less energy than the stint average -- the signature of efficient battery management. A positive Delta-E indicates costly position gains that may be unsustainable over a full race distance.</p>
+      <div class="impact-block green"><p class="impact-label">What this means for consumer EV context</p><p>A negative Delta-E in a racing context maps to a real-world driver who gained range by driving more efficiently -- not by having a larger pack. Teams with consistently negative Delta-E scores have battery management strategies worth analyzing for consumer EV application.</p></div>
+    </div>
+  </div>
+  <div class="finding">
+    <div class="finding-header"><span class="finding-number">M2</span><span class="finding-title">FE2C Efficiency Score -- normalized cross-generation comparison</span></div>
+    <div class="finding-body">
+      <p>FE2C Efficiency Score = (Total Race Distance / Energy Used) x (Average Lap Velocity), normalized across generations using declared battery capacity differentials and adjusted for track profile using the aggression rating from the Track Profile dimension.</p>
+      <div class="impact-block amber"><p class="impact-label">Modeling assumption -- documented</p><p>Normalization across Gen 2 and Gen 3 requires assumptions about how capacity differentials map to efficiency comparability. Those assumptions are documented in the dbt test layer and in the project write-up. Every efficiency comparison in this analysis specifies which generation it applies to and what normalization was applied.</p></div>
+    </div>
+  </div>
+</section>
+<section id="data" class="section">
+  <p class="section-label">Technical Reference</p>
+  <h2 class="section-title">Data sources and known gaps</h2>
+  <div class="data-table-wrap"><table><thead><tr><th>Source</th><th>What it provides</th><th>Status</th></tr></thead><tbody>
+    <tr><td>FIA / Formula E API</td><td>Lap times, race results, gap data, pit events</td><td>Live -- ingested via pipeline</td></tr>
+    <tr><td>Open-Meteo API</td><td>Ambient temperature, humidity, track temperature at stint start</td><td>Live -- weather enrichment layer</td></tr>
+    <tr><td>California DMV</td><td>EV registrations by brand, powertrain, ZIP code</td><td>Static -- loaded at pipeline init</td></tr>
+    <tr><td>Lucid Motors / FIA documentation</td><td>Battery specs, Gen 3 regen specifications (250 kW front axle)</td><td>ChromaDB -- semantic search layer</td></tr>
+    <tr><td>Formula E energy telemetry</td><td>Lap-level energy consumption</td><td>NOT AVAILABLE -- proxy engineered from lap time and gap data</td></tr>
+    <tr><td>Raw regen efficiency data</td><td>Per-stint regen recovery amounts</td><td>NOT AVAILABLE -- Regen Opportunity Index constructed from deceleration zone analysis</td></tr>
+  </tbody></table></div>
+  <div class="impact-block amber" style="margin-top:16px"><p class="impact-label">Known data gaps and how they are handled</p><p>The two most important data gaps -- energy telemetry and regen efficiency -- are not available in any public Formula E data source. The proxy metrics that substitute for them are documented in the dbt quality layer with explicit assumptions. This is standard practice in production analytics environments where perfect data does not exist. The quality of a model is partly judged by how clearly its assumptions are stated.</p></div>
+  <div style="margin-top:20px"><p class="section-label" style="margin-bottom:10px">Tech Stack</p>
+  <div class="data-table-wrap"><table><thead><tr><th>Layer</th><th>Tool</th></tr></thead><tbody>
+    <tr><td>Pipeline orchestration</td><td>Python -- 7-stage run_pipeline() function</td></tr>
+    <tr><td>Database</td><td>SQLite star schema (race_stints fact + 4 dimensions)</td></tr>
+    <tr><td>Data quality</td><td>dbt -- 10 targeted assertions, documented in test layer</td></tr>
+    <tr><td>Vector store</td><td>ChromaDB -- Formula E and Lucid technical documentation</td></tr>
+    <tr><td>Agent</td><td>Claude API tool-use -- 8 custom tools</td></tr>
+    <tr><td>CA market simulation</td><td>Python -- ZIP-code weighted density vs. recovery recommendation</td></tr>
+  </tbody></table></div></div>
+</section>
+
+<section class="section">
+  <p class="section-label">Limitations</p>
+  <h2 class="section-title">What this analysis cannot tell you</h2>
+  <div class="finding">
+    <div class="finding-header">
+      <span class="finding-number" style="background:var(--amber)">L</span>
+      <span class="finding-title">Three things this project does not claim to prove</span>
+    </div>
+    <div class="finding-body">
+      <p><strong>1. The efficiency scores are proxy-based, not measured.</strong> Formula E does not publish lap-level energy telemetry. Every efficiency metric in this project is derived from lap time deltas, gap data, and published battery capacity specifications. The proxy assumptions are documented in the dbt quality layer. Do not treat FE2C Efficiency Scores as equivalent to measured energy consumption data.</p>
+      <p><strong>2. The Lucid-Mahindra technology transfer is assumed, not independently verified.</strong> The project uses published reporting on Lucid's role as Mahindra's powertrain supplier as the basis for the technology transfer thesis. The specific engineering details of what transferred, when, and how are not publicly available. The project treats this as a plausible case study, not a confirmed causal chain.</p>
+      <p><strong>3. The California simulation is a weighted estimate, not a predictive model.</strong> The density vs. recovery recommendation by ZIP code is based on EV registration density and environmental proxies. It is a structured framework for thinking about the question, not a validated demand model. A/B testing or survey data from actual EV buyers in each region would be required to validate the recommendation.</p>
+      <div class="impact-block amber">
+        <p class="impact-label">Why these limitations are documented upfront</p>
+        <p>In production analytics environments, the quality of a model is partly judged by how clearly its assumptions and limits are stated. A stakeholder who understands what the analysis cannot tell them is better positioned to make good decisions than one who treats all outputs as equally certain. Every proxy metric in this project is labeled as such in the pipeline output.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
+<footer style="max-width:860px;margin:0 auto;padding:0 24px 48px"><span>Julian Batto-Hokson · 2026</span><span><a href="https://github.com/jbattohokson">GitHub</a> · Python · SQLite · dbt · ChromaDB · Claude API</span></footer>
+</body></html>
