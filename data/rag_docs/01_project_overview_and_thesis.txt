@@ -1,0 +1,42 @@
+FE2C Project Overview and Core Thesis
+Source: FE2C Technical Report — Section 1
+
+Formula E to Consumer (FE2C) Optimization Engine
+Battery Innovation, Energy Efficiency, and the Road from Motorsport to Market
+
+PROJECT OVERVIEW
+
+This project analyzes how energy and battery management strategies developed in Formula E racing
+translate into real-world electric vehicle performance improvements, with Lucid Motors as the
+primary case study. Rather than measuring raw speed, the central question is efficiency: how do
+teams and manufacturers convert limited stored energy into maximum performance, and what does
+that discipline teach us about battery technology at scale?
+
+The FE2C framework treats Formula E as a live laboratory for battery and energy systems R&D,
+where competitive pressure compresses development cycles that would otherwise take years in
+consumer contexts. Lucid Motors represents a direct line of transfer: having supplied powertrain
+technology to the Mahindra Formula E team, Lucid occupies a rare position as both racing supplier
+and consumer EV manufacturer.
+
+CORE PROJECT QUESTIONS
+
+- How do Formula E teams measure and optimize energy efficiency under race conditions?
+- Which battery management strategies (energy density vs. regen recovery) produce the greatest
+  performance gains?
+- How do Lucid Motors' proprietary battery innovations compare to Formula E-era benchmarks?
+- What does Formula E's generational battery evolution tell us about the current consumer EV
+  landscape?
+
+WHY FORMULA E AS A BATTERY TESTBED
+
+Formula E operates under a unique constraint that makes it an ideal proxy for consumer EV
+challenges: every race is a precise energy management problem. Unlike combustion motorsports
+where fuel consumption is an efficiency target, Formula E teams face hard energy caps that
+function like a fixed battery charge. Exceeding allocated energy means slowing down or being
+disqualified.
+
+This constraint structure is functionally identical to the consumer EV challenge. A driver who
+depletes their battery before the finish line faces the same problem as a commuter who runs out
+of charge before reaching a charging station. The engineering solutions that work under
+competitive pressure — thermal management, regen optimization, energy budgeting — transfer
+directly to consumer product development.

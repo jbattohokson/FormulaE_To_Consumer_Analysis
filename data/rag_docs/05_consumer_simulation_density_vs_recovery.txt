@@ -1,0 +1,82 @@
+Consumer EV Simulation — Density vs Recovery Strategy
+Source: FE2C Technical Report — Sections 6.1, 6.2, 6.3
+
+THE CONSUMER EV SIMULATION PHASE
+
+The simulation phase applies Formula E battery management findings to real-world consumer
+EV challenges, using California as the primary market context due to its EV adoption leadership,
+diverse driving environments, and well-documented range anxiety patterns.
+
+THE CORE SCENARIO (Section 6.1)
+
+If Formula E-derived regen efficiency data is mapped to California traffic patterns, which battery
+management strategy produces the greatest consumer range improvement:
+
+- Increasing battery density (larger pack), or
+- Increasing recovery efficiency (faster and more effective regenerative braking)?
+
+CALIFORNIA'S TWO CHALLENGE ENVIRONMENTS
+
+Inland Empire / Central Valley:
+High ambient temperatures stress thermal management. Stop-and-go traffic on I-10 and SR-99
+creates frequent regen opportunities. Range anxiety is acute due to sparse charging
+infrastructure relative to distances traveled. This environment favors Battery Density strategy.
+
+Bay Area / LA Metro:
+High traffic density on I-405, I-80, and Highway 101 produces dense regen cycles. Shorter
+average trip distances reduce range anxiety but increase charging frequency demands.
+This environment favors Recovery Efficiency strategy.
+
+The contrast between these two environments is why the FE2C ZIP code selection includes both:
+the inland corridor provides the thermal stress test; the Bay Area/coastal corridor provides the
+regen-dense urban use case where Formula E learning is most directly applicable.
+
+REGEN PROXY MODELING (Section 6.2)
+
+Because Formula E does not publish raw regen telemetry, a Regen Opportunity Index is
+constructed from available data:
+
+- Deceleration zone frequency per lap (from sector time analysis)
+- Lap time variance as a proxy for energy recovery variability across racing conditions
+- Generation-adjusted regen capacity based on published Gen 3 front axle regeneration
+  specifications (250 kW front, supplementing rear powertrain)
+
+The Regen Opportunity Index formula used in this project:
+  regen_opportunity_index = (1 / lap_time_variance) * log1p(elevation_delta_m) / battery_kwh
+
+This normalizes by pack size so Gen 2 (52 kWh) and Gen 3 (38.5 kWh) teams are compared
+on equivalent terms — a higher index means more regen opportunity per unit of stored energy.
+
+DENSITY VS. RECOVERY BUSINESS OUTPUT (Section 6.3)
+
+Battery Density Strategy:
+Larger pack, higher upfront cost, heavier vehicle, longer range buffer.
+Favored in low-infrastructure markets (Central Valley long-haul).
+Lucid Air Grand Touring (516 mi EPA, 118 kWh) as the primary benchmark.
+
+Recovery Efficiency Strategy:
+Optimized regen, lighter pack, lower cost, shorter range but more dynamic charging.
+Favored in dense urban stop-and-go (LA Metro, Bay Area).
+Aligns with Formula E Gen 3 design philosophy (600 kW combined regen capability).
+
+Hybrid Recommendation:
+ZIP code-level California adoption data used to weight the recommendation:
+- Dense urban ZIPs (median EVs per ZIP >= 500): favor Recovery Efficiency
+- Rural and exurban ZIPs: favor Battery Density
+
+This threshold-based recommendation is the primary business deliverable of the FE2C Week 3
+simulation — it translates racing engineering data into a market strategy insight.
+
+LUCID CONSUMER BENCHMARK CROSSWALK
+
+The FE2C regen transfer simulation estimates how Lucid/Mahindra's Gen 3 racing regen
+advantage translates to real-world range on Lucid consumer vehicles:
+
+Transfer factor = (Lucid_regen_index - field_regen_index) / field_regen_index
+Regen weight = 15% (conservative midpoint of real-world regen contribution to range)
+Simulated range = EPA_baseline * (1 + transfer_factor * regen_weight)
+
+Applied to each Lucid model:
+- Air Sapphire (687 mi EPA): highest range ceiling if regen advantage is real
+- Air Grand Touring (516 mi EPA): primary density benchmark
+- Gravity SUV (450 mi EPA): demonstrates architecture scaling to SUV platform

@@ -1,0 +1,19 @@
+# Data pipeline (Layer 1) — no extra deps beyond the standard library + these:
+pandas>=2.0.0
+numpy>=1.24.0
+requests>=2.31.0
+scipy>=1.11.0
+
+# RAG vector store (Layer 2)
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+pypdf>=4.0.0
+
+# Agentic RAG (Layer 3)
+anthropic>=0.34.0
+
+# Install:  pip install -r requirements.txt
+# Run:      python3 fe2c.py --reset      # build the SQLite DB
+#           python3 fe2c.py --ingest     # build the ChromaDB vector store
+#           export ANTHROPIC_API_KEY=sk-ant-...
+#           python3 fe2c.py --demo       # 5 built-in showcase questions

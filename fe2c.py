@@ -1,25 +1,25 @@
-# FE2C Optimization Engine — Formula E to Consumer
+# FE2C Optimization Engine: Formula E to Consumer
 # A single-file data engineering pipeline + agentic RAG system that treats
 # Formula E racing as a live laboratory for consumer EV battery R&D.
 
 # ARCHITECTURE OVERVIEW
 # This file has three layers that run sequentially before the agent is useful:
 
-# Layer 1 — Data Pipeline (ETL)
+# Layer 1: Data Pipeline (ETL)
 #   Builds a SQLite star-schema database from simulated Formula E race data,
 #   Open-Meteo weather, and California DMV EV registrations. Computes three
 #   proprietary efficiency metrics: regen_opportunity_index, fe2c_efficiency_score,
 #   and delta_e (the per-stint energy discipline signal from Technical Report §5.1).
 
-#  Layer 2 — RAG Vector Store
+#  Layer 2: RAG Vector Store
 #   Chunks and embeds Technical Report excerpts (.txt files in data/rag_docs/),
 #   any PDF files found in that folder, and Wikipedia articles on Formula E seasons,
 #   Mahindra Racing, Lucid Motors, and Gen 3 car specifications. Stored in ChromaDB
 #   using a sentence-transformer embedding model. This lets the agent cite the
 #   project's own research rather than relying on general training knowledge.
 
-#  Layer 3 — Agentic RAG (Anthropic Claude)
-#   A tool-use agent with 8 tools spanning both layers — structured SQLite queries,
+#  Layer 3: Agentic RAG (Anthropic Claude)
+#   A tool-use agent with 8 tools spanning both layers, structured SQLite queries,
 #   semantic ChromaDB search, efficiency comparisons, range simulations, cold-start
 #   circuit predictions, and the Section 2 regen index calculation. Uses prompt
 #   caching on the system prompt and tool schemas to reduce API cost across the
@@ -43,7 +43,7 @@
 #   sentence-transformers pypdf
 
 # PYLANCE NOTE
-#   anthropic and chromadb live under TYPE_CHECKING — Pylance resolves their types
+#   anthropic and chromadb live under TYPE_CHECKING: Pylance resolves their types
 #   at edit time but they never execute at module import. Runtime imports happen
 #   lazily inside each function that needs them. No settings.json changes required.
 
@@ -94,7 +94,7 @@ if TYPE_CHECKING:
 
 
 # Paths and project-wide constants
-# All paths are relative to __file__ so the project is portable — clone the repo
+# All paths are relative to __file__ so the project is portable, clone the repo
 # anywhere and the DB, ChromaDB, and CSV outputs land in the right place automatically.
 
 ROOT       = Path(__file__).resolve().parent
@@ -124,9 +124,9 @@ MAX_ITERATIONS      = 8
 # Gen3 front + rear regen figures are from the FIA homologation spec; the field energy
 # consumption of ~1.8 kWh/km is back-calculated from published race energy budgets.
 ENGINEERED_PROXIES: dict[str, float] = {
-    "gen2_regen_efficiency":    0.18,   # 18% recovery — Gen2 single rear-motor architecture
-    "gen3_front_regen_kw":    250.0,   # Front axle motor peak recovery power (Gen3 homologated)
-    "gen3_rear_regen_kw":     350.0,   # Rear axle motor peak recovery power (Gen3 homologated)
+    "gen2_regen_efficiency":    0.18,   # 18% recovery Gen2 single rear-motor architecture
+    "gen3_front_regen_kw":    250.0,    # Front axle motor peak recovery power (Gen3 homologated)
+    "gen3_rear_regen_kw":     350.0,    # Rear axle motor peak recovery power (Gen3 homologated)
     "gen3_recovery_ratio":      0.22,   # Assumed 22% of consumed energy recovered per lap (Gen3)
     "field_energy_kwh_per_km":  1.8,    # Field-average energy draw, back-calculated from FIA budgets
 }
@@ -311,7 +311,7 @@ WIKIPEDIA_SOURCES = [
     ("2023-24 Formula E season",  "https://en.wikipedia.org/wiki/2023-24_Formula_E_season"),
     ("Mahindra Racing Formula E", "https://en.wikipedia.org/wiki/Mahindra_Racing"),
     ("Lucid Motors",              "https://en.wikipedia.org/wiki/Lucid_Motors"),
-    ("Formula E Gen3 car",        "https://en.wikipedia.org/wiki/Gen3_(Formula_E)"),
+    ("Formula E Gen3 car",        "https://en.wikipedia.org/wiki/Formula_E_Gen3"),  # fixed 2026-09-16: "Gen3_(Formula_E)" 404s, real title has no parens
 ]
 
 SCHEMA_SQL = """
@@ -553,7 +553,7 @@ def seed_dimensions() -> None:
 # Formula E does not publish lap-level energy telemetry publicly (Technical Report §8).
 # _build_stints() generates plausible race records using documented outcomes (grid positions,
 # race results, DNF rates) combined with engineered proxies for energy metrics. The random
-# seed is deterministic per season so results are reproducible — a deliberate data quality
+# seed is deterministic per season so results are reproducible a deliberate data quality
 # decision. Every metric derived from this layer is labeled "documented_outcomes_estimated_telemetry"
 # in the data_source column so the provenance is always queryable.
 
@@ -928,7 +928,7 @@ def run_california_ingestion(conn: sqlite3.Connection) -> None:
 #
 #   regen_opportunity_index: how much regen opportunity the circuit + conditions created,
 #     normalized by pack size so Gen 2 and Gen 3 are on a comparable scale. Not live
-#     telemetry — a proxy engineered from elevation and lap variance (Technical Report §6.2).
+#     telemetry, a proxy engineered from elevation and lap variance (Technical Report §6.2).
 #
 #   fe2c_efficiency_score: 70% energy efficiency + 30% normalized velocity, min-max
 #     scaled within each generation cohort. The 70/30 split ensures energy discipline
@@ -1384,19 +1384,41 @@ def chunk_text(text: str, source_name: str) -> list[dict]:
 
 
 def fetch_wikipedia_text(url: str) -> str | None:
+    """Fetch a Wikipedia article's summary + full extract.
+
+    Fixed 2026-09-16: firing 8 unpaced requests at Wikipedia back-to-back
+    reliably triggered 429 Too Many Requests during testing (3 of 8 articles
+    failed with zero retry). Wikipedia's own guidance is to keep well under 1
+    req/sec from a shared/anonymous IP. Added a short pre-request pause plus
+    one backoff-and-retry specifically on 429, since these are the polite,
+    low-cost fixes for a rate limit (vs. a real outage, which still degrades
+    gracefully to None as before).
+    """
+    import time as _time
+
+    def _get(url_: str, **kwargs) -> requests.Response:
+        for attempt, delay in enumerate((0, 3, 6)):
+            if delay:
+                _time.sleep(delay)
+            r = requests.get(url_, **kwargs)
+            if r.status_code != 429 or attempt == 2:
+                break
+        r.raise_for_status()
+        return r
+
     try:
+        _time.sleep(1)  # stay under Wikipedia's anonymous rate limit
         title   = url.rstrip("/").split("/wiki/")[-1]
         headers = {"User-Agent": "FE2C-RAG/1.0"}
-        r1 = requests.get(
+        r1 = _get(
             f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}",
             timeout=15, headers=headers)
-        r1.raise_for_status()
         summary = r1.json().get("extract", "")
-        r2 = requests.get("https://en.wikipedia.org/w/api.php",
+        _time.sleep(1)  # pace the second request too, not just retries
+        r2 = _get("https://en.wikipedia.org/w/api.php",
             params={"action": "query", "titles": title.replace("_", " "),
                     "prop": "extracts", "explaintext": True, "format": "json"},
             timeout=15, headers=headers)
-        r2.raise_for_status()
         pages = r2.json().get("query", {}).get("pages", {})
         return next(iter(pages.values()), {}).get("extract", summary) or summary
     except Exception as e:
@@ -1451,7 +1473,7 @@ def run_ingest() -> None:
         except Exception as e:
             print(f"  WARNING: {f.name}: {e}")
 
-    # PDF files in rag_docs/ — auto-extract text so dropping a PDF is enough to ingest it.
+    # PDF files in rag_docs/ auto-extract text so dropping a PDF is enough to ingest it.
     # pypdf is pure Python and already installed alongside anthropic.
     for f in sorted(DOCS_DIR.glob("*.pdf")):
         text = _extract_pdf_text(f)
@@ -1533,9 +1555,9 @@ def run_enrichment() -> None:
         for _, row in outliers.iterrows():
             stint_id  = int(row["stint_id"])
             direction = "above" if row["z_score"] > 0 else "below"
-            #Bias toward battery innovation context Gen3 queries surface thermal management
-            #and charge speed themes; Gen2 queries surface energy density and pack engineering.
-            #This aligns ChromaDB retrieval with the FE2C thesis rather than generic race recaps.
+            # Bias toward battery innovation context Gen3 queries surface thermal management
+            # and charge speed themes; Gen2 queries surface energy density and pack engineering.
+            # This aligns ChromaDB retrieval with the FE2C thesis rather than generic race recaps.
             gen_framing = (
                 "Gen3 active thermal management charge speed front axle regeneration 250kW"
                 if row["gen_name"] == "Gen3"
@@ -1571,9 +1593,9 @@ def run_enrichment() -> None:
                     messages=[{"role": "user", "content": prompt}]
                 ).content[0].text.strip()
             except Exception as api_err:
-                #API failure fallback per Technical Report §8 (Engineered Proxies).
-                #Rather than dropping the row, write a structured proxy annotation so the
-                #rag_context table stays populated and downstream queries aren't starved of context.
+                # API failure fallback per Technical Report §8 (Engineered Proxies).
+                # Rather than dropping the row, write a structured proxy annotation so the
+                # rag_context table stays populated and downstream queries aren't starved of context.
                 eer_direction = "above" if row["eer_proxy"] > 0 else "below"
                 diagnostic = (
                     f"[PROXY ANNOTATION — API unavailable: {type(api_err).__name__}] "
@@ -1647,7 +1669,7 @@ def print_rag_stats() -> None:
 # Layer 3: Agent tools
 # Each function takes a dict of arguments matching its JSON schema and returns a plain
 # string. Errors are returned as strings rather than raised so Claude can read the error
-# message, self-correct, and retry with different arguments — this is the core property
+# message, self-correct, and retry with different arguments, this is the core property
 # that makes tool-use agents robust on malformed or ambiguous user questions.
 #
 # Tool design principle: every tool covers a distinct analytical surface. There is no
@@ -1924,8 +1946,8 @@ def tool_new_circuit_prediction(args: dict) -> str:
 
     try:
         with _require_db() as conn:
-            #Rank circuits by elevation proximity, then filter by at least one matching
-            #categorical feature so the prior isn't drawn from unrelated venues.
+            # Rank circuits by elevation proximity, then filter by at least one matching
+            # categorical feature so the prior isn't drawn from unrelated venues.
             df = pd.read_sql_query(
                 """
                 WITH ranked_circuits AS (
@@ -2044,9 +2066,9 @@ def tool_calculate_regen_index(args: dict) -> str:
                 "\nRun the full pipeline (--reset) to replace these with race-derived figures."
             )
 
-        #Normalize within each gen cohort so Gen2 and Gen3 are ranked independently.
-        #Dividing by battery_kwh collapses the pack-size advantage a team on a 38.5 kWh
-        #Gen3 pack that matches a 52 kWh Gen2 team's raw index is genuinely more efficient.
+        # Normalize within each gen cohort so Gen2 and Gen3 are ranked independently.
+        # Dividing by battery_kwh collapses the pack-size advantage a team on a 38.5 kWh
+        # Gen3 pack that matches a 52 kWh Gen2 team's raw index is genuinely more efficient.
         df["regen_index_ratio"] = df["avg_regen_proxy"] / df["battery_kwh"].clip(lower=1e-6)
 
         df["gen_rank"] = (
@@ -2075,9 +2097,9 @@ def tool_calculate_regen_index(args: dict) -> str:
                 )
             lines.append("")
 
-        #Consumer benchmark crosswalk: translate the Gen3 regen ratio to estimated
-        #range uplift on Lucid's consumer vehicles using the same transfer logic as
-        #compute_range_simulation, but expressed per vehicle model.
+        # Consumer benchmark crosswalk: translate the Gen3 regen ratio to estimated
+        # range uplift on Lucid's consumer vehicles using the same transfer logic as
+        #   compute_range_simulation, but expressed per vehicle model.
         gen3_rows = df[df["gen_name"] == "Gen3"]
         if not gen3_rows.empty:
             lucid_chain  = gen3_rows[gen3_rows["manufacturer_name"].str.contains("Mahindra|Lucid", case=False, na=False)]
@@ -2110,7 +2132,7 @@ def tool_calculate_regen_index(args: dict) -> str:
 def tool_strategy_recommendation(args: dict) -> str:
     """ZIP/county-weighted density-vs-recovery strategy recommendation (§6.3)."""
     county = args.get("county", "").strip()
-    #Threshold calibrated to the CA dataset: LA/Orange exceed this; Kern/Stanislaus sit below.
+    # Threshold calibrated to the CA dataset: LA/Orange exceed this; Kern/Stanislaus sit below.
     DENSITY_THRESHOLD = 500
 
     try:
@@ -2382,7 +2404,7 @@ consumer contexts.
 
 Every race is a controlled experiment in energy management under hard constraints. Every stint
 record in this database is a data point in a multi-season study of how teams convert stored
-electrochemical energy into mechanical advantage — and what that discipline teaches us about
+electrochemical energy into mechanical advantage and what that discipline teaches us about
 building better consumer EVs.
 
 Lucid Motors is the direct line of transfer. As powertrain supplier to the Mahindra Formula E
@@ -2481,8 +2503,8 @@ def run_agent(question: str, verbose: bool = True) -> str:
     client   = _anthropic.Anthropic()
     messages = [{"role": "user", "content": question}]
 
-    #Cache the system prompt and tool list — both are static across all iterations.
-    #Cache hits avoid re-encoding ~2k tokens per turn, compounding across multi-step questions.
+    # Cache the system prompt and tool list both are static across all iterations.
+    # Cache hits avoid re-encoding ~2k tokens per turn, compounding across multi-step questions.
     cached_system = [{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}]
     cached_tools  = TOOL_SCHEMAS[:-1] + [
         {**TOOL_SCHEMAS[-1], "cache_control": {"type": "ephemeral"}}
@@ -2629,13 +2651,13 @@ def main() -> None:
     parser.add_argument("--reset",        action="store_true", help="Wipe and rebuild database")
     parser.add_argument("--no-csv",       action="store_true", help="Skip Week 3 CSV output")
 
-    #RAG flags
+    # `RAG flags
     parser.add_argument("--ingest",  action="store_true", help="Build ChromaDB vector store")
     parser.add_argument("--enrich",  action="store_true", help="RAG enrichment on outlier stints")
     parser.add_argument("--query",   type=str,            help="Ad-hoc natural language query (pipeline RAG)")
     parser.add_argument("--stats",   action="store_true", help="Print RAG and DB stats")
 
-    #Agent flags
+    # Agent flags
     parser.add_argument("--chat",    action="store_true", help="Interactive agent chat loop")
     parser.add_argument("--ask",     type=str,            help="Single agent question, then exit")
     parser.add_argument("--demo",    action="store_true", help="Run built-in demo questions")
@@ -2644,7 +2666,7 @@ def main() -> None:
     args    = parser.parse_args()
     verbose = not args.quiet
 
-    #Agent modes
+    # Agent modes
     if args.chat or args.ask or args.demo:
         print("FE2C Intelligence Agent")
         print(f"Model: {CLAUDE_MODEL}")
@@ -2681,7 +2703,7 @@ def main() -> None:
                 print(f"\nFINAL ANSWER:\n{answer}\n")
         return
 
-    #RAG modes (no agent loop)
+    # RAG modes (no agent loop)
     if any([args.ingest, args.enrich, args.query, args.stats]):
         if args.ingest: run_ingest()
         if args.enrich: run_enrichment()

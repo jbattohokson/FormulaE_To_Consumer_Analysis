@@ -1,0 +1,63 @@
+FE2C Efficiency Metrics — Delta-E, FE2C Score, and Cold Start Modeling
+Source: FE2C Technical Report — Sections 5.1, 5.2, 5.3
+
+THE EFFICIENCY FRONTIER ANALYSIS
+
+The central analytical frame shifts from speed to efficiency. A team that wins by consuming
+significantly less energy than its rivals has demonstrated a genuinely transferable battery
+management insight. A team that wins by raw pace alone has demonstrated setup advantage.
+
+This distinction is the core of the FE2C thesis: Formula E data is only useful for consumer
+EV development if we can separate energy discipline from mechanical advantage.
+
+THE DELTA-E METRIC (Section 5.1)
+
+Using SQL window functions, a Delta-E score is calculated for each stint:
+
+Delta-E = Energy Consumed (proxy) vs. Race Average Energy Cost
+
+A negative Delta-E indicates a team gained positions while consuming less energy than the
+stint average — the signature of efficient battery management. This is the per-race signal
+that identifies which teams are genuinely operating more efficiently, independent of raw pace.
+
+A positive Delta-E indicates costly position gains, potentially unsustainable over a full race
+distance. A team posting consistently positive Delta-E is burning through their energy budget
+to maintain position — a strategy with no consumer EV analogue.
+
+Delta-E is calculated as:
+  energy_cost_proxy = 1 / EER_proxy
+  race_avg_cost = mean(energy_cost_proxy) across all stints in that race
+  delta_e = energy_cost_proxy - race_avg_cost
+
+Negative delta_e = used less energy than the field average = efficient battery management.
+
+THE FE2C EFFICIENCY SCORE (Section 5.2)
+
+A proprietary efficiency score is calculated per manufacturer per race, designed to capture
+the quality of energy conversion rather than absolute pace.
+
+The score is:
+  raw_fe2c = (Total Race Distance / Energy Used) * 0.70 + normalized_velocity * 0.30
+
+Scores are normalized across generations (Gen 2 vs. Gen 3) using declared battery capacity
+differentials and adjusted for track profile. The 70/30 weighting ensures efficiency drives
+the ranking, not raw pace. A slow team with excellent energy discipline should rank higher
+than a fast team with wasteful management — this is the design intent.
+
+This normalization is a significant data cleaning challenge requiring careful documentation
+of assumptions, as Gen 2 (52 kWh) and Gen 3 (38.5 kWh) packs have different energy budgets.
+
+THE COLD START PROBLEM — MODELING NEW CIRCUITS (Section 5.3)
+
+When Formula E adds a new street circuit, historical data does not exist. The cold start
+solution applies feature engineering to grade new circuits by proxy characteristics:
+
+Aggression Level: Corner count, average speed trap delta, braking zone frequency
+Traction Demand: Surface roughness proxy, elevation change, weather exposure
+Regen Opportunity Index: Proportion of circuit with deceleration zones long enough for
+meaningful energy recovery
+
+These features allow historical efficiency scores from similar circuits to be applied as priors
+for new venue predictions. This modeling approach is directly applicable to Lucid's challenge
+of estimating real-world range on routes the car has never driven — the same Bayesian prior
+logic applies whether you are predicting race performance or consumer range.

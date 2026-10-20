@@ -1,0 +1,51 @@
+Formula E Generational Battery Evolution — Gen 1 through Gen 3
+Source: FE2C Technical Report — Section 2
+
+GENERATIONAL BATTERY ARCHITECTURE
+
+Formula E's three-generation battery architecture provides a clear quantified progression that
+maps directly to consumer EV development milestones.
+
+Gen 1 (2014–2017): ~28 kWh capacity
+Energy so limited that teams swapped cars mid-race. Proof of concept for electric racing,
+not endurance. The primary engineering challenge was pack safety under crash loads, not
+range optimization.
+
+Gen 2 (2018–2020): ~54 kWh capacity
+Full race distance on a single charge achieved for the first time. Major leap in cell energy
+density and pack engineering. Teams learned to manage thermal degradation over a complete
+race, a skill directly transferable to consumer long-distance driving.
+
+Gen 3 (2023–present): 38.5 kWh usable, dual-motor regen
+Focus shifts to charge speed, lighter packs, active thermal management, and recyclability.
+Front axle regeneration: 250 kW. Rear axle regeneration: 350 kW. Combined peak regen of
+600 kW is the key engineering signal — it means the car recovers energy faster than most
+consumer EVs can discharge it. This aligns directly with consumer priorities around range
+anxiety and charging infrastructure.
+
+THE BATTERY AS THE CORE TECHNOLOGY
+
+In consumer EVs, the battery pack determines range, charge speed, thermal durability, and
+ultimately resale value. Formula E has forced the same prioritization in a high-stakes environment.
+
+Key battery capabilities shaped by Formula E racing:
+- Higher energy density enabling longer race distances and reduced pack weight
+- Faster charge and discharge rates for dynamic race strategies (Attack Mode)
+- Thermal management under extreme charge/discharge cycles
+- Enhanced safety through FIA-mandated crash and fire resistance standards
+
+GEN 2 VS GEN 3 COMPARISON — KEY METRICS
+
+Gen 2 pack: 52 kWh — focus on energy density, single-charge endurance
+Gen 2 regen: rear motor only, estimated 18% energy recovery efficiency
+Gen 2 design lesson: pack size is the primary range lever
+
+Gen 3 pack: 38.5 kWh — smaller pack, more efficient use
+Gen 3 regen: front (250 kW) + rear (350 kW) = 600 kW combined peak
+Gen 3 recovery ratio: approximately 22% of consumed energy recovered per lap
+Gen 3 design lesson: regen architecture can partially substitute for pack size
+
+This generational shift — from "bigger pack" to "smarter recovery" — is the central technical
+thesis of the FE2C project and maps directly to the consumer EV market debate between
+battery density optimization (Lucid Air Grand Touring approach) and recovery efficiency
+optimization (urban EV approach).

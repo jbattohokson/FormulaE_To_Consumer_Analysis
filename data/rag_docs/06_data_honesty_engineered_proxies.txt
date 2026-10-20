@@ -1,0 +1,65 @@
+Data Availability, Engineered Proxies, and Modeling Honesty
+Source: FE2C Technical Report — Section 8
+
+DATA HONESTY AS A DESIGN PRINCIPLE
+
+Transparency about data constraints is a design principle of this project, not a limitation to
+obscure. Two key gaps are addressed directly in the technical architecture:
+
+KNOWN DATA GAPS AND MITIGATION APPROACHES
+
+Gap 1: Formula E lap-level energy telemetry
+Status: Not publicly available. Formula E does not publish per-lap energy consumption data.
+Mitigation: Proxy metric engineered from lap times, sector deltas, and gap data.
+All modeling assumptions documented. Every metric clearly distinguishes between
+measured data and engineered proxy.
+
+Gap 2: Raw regen efficiency data
+Status: Not published. Teams treat regen performance as proprietary.
+Mitigation: Regen Opportunity Index constructed from deceleration zone analysis and
+Gen 3 published specifications. The index is a proxy, not a measurement.
+
+Gap 3: California DMV registration recency
+Status: The CA DMV open data endpoint returns a 2018 snapshot. Lucid began consumer
+deliveries in Q4 2021, so Lucid registrations do not appear in the live dataset.
+Mitigation: Lucid-specific synthetic supplement injected when live data shows zero Lucid
+registrations. Counts calibrated to known CA market patterns from Lucid's public
+delivery reports. Logged transparently in pipeline output.
+
+ENGINEERED PROXY CONSTANTS (Page 7)
+
+These values are used as fallback estimates when live telemetry or database data is absent:
+
+Gen 2 regen efficiency: 18%
+  Single rear-motor architecture, no front axle recovery. Published in FIA Gen 2 specs.
+
+Gen 3 front motor regen: 250 kW
+  Front axle peak recovery power. FIA Gen 3 homologation specification.
+
+Gen 3 rear motor regen: 350 kW
+  Rear axle peak recovery power. FIA Gen 3 homologation specification.
+
+Gen 3 recovery ratio: 22%
+  Assumed fraction of consumed energy recovered per lap under typical racing conditions.
+  Derived from published FIA budget constraints and publicly available sector time analysis.
+
+Field energy consumption: 1.8 kWh/km
+  Back-calculated from FIA declared energy budgets and typical race distances.
+  Used as the baseline when circuit-specific telemetry is unavailable.
+
+MODELING HONESTY FRAMEWORK
+
+In the project write-up, every metric clearly distinguishes between measured data and
+engineered proxy. This is standard practice in production analytics environments where
+perfect data rarely exists and the quality of a model is partly judged by how clearly its
+assumptions are stated.
+
+When a proxy is used in place of real data, the pipeline:
+1. Logs the fact that a proxy is being used (not silent substitution)
+2. States the source of the proxy value (FIA spec, technical report, published delivery data)
+3. Labels the output as [PROXY ESTIMATE] in agent responses
+4. Preserves the adversarial note in all Week 3 reports
+
+This transparency is not a weakness — it is what separates production-grade data engineering
+from exploratory analysis. A recruiter or technical interviewer reading this code should see
+that the engineer understood the data limitations and designed around them honestly.
