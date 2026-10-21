@@ -69,14 +69,16 @@ simulation — it translates racing engineering data into a market strategy insi
 
 LUCID CONSUMER BENCHMARK CROSSWALK
 
-The FE2C regen transfer simulation estimates how Lucid/Mahindra's Gen 3 racing regen
+The FE2C regen transfer simulation estimates how the focus team's (Mahindra's) Gen 3 regen
 advantage translates to real-world range on Lucid consumer vehicles:
 
-Transfer factor = (Lucid_regen_index - field_regen_index) / field_regen_index
+Transfer factor = (focus_regen_index - field_regen_index) / field_regen_index
+(can be negative; the CI resamples both groups. Race stints are simulated, so this
+demonstrates the method, not a real advantage.)
 Regen weight = 15% (conservative midpoint of real-world regen contribution to range)
 Simulated range = EPA_baseline * (1 + transfer_factor * regen_weight)
 
 Applied to each Lucid model:
-- Air Sapphire (687 mi EPA): highest range ceiling if regen advantage is real
+- Air Sapphire (427 mi EPA): performance flagship
 - Air Grand Touring (516 mi EPA): primary density benchmark
 - Gravity SUV (450 mi EPA): demonstrates architecture scaling to SUV platform

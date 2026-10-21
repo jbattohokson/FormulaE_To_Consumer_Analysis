@@ -39,12 +39,13 @@ Gen 3 front motor regen: 250 kW
 Gen 3 rear motor regen: 350 kW
   Rear axle peak recovery power. FIA Gen 3 homologation specification.
 
-Gen 3 recovery ratio: 22%
-  Assumed fraction of consumed energy recovered per lap under typical racing conditions.
-  Derived from published FIA budget constraints and publicly available sector time analysis.
+Gen 3 recovery ratio: 40%
+  The FIA states that more than 40% of the energy a Gen 3 car uses in a race is produced by
+  regenerative braking (corrected 2026-10-21; this was previously an assumed 22%).
 
-Field energy consumption: 1.8 kWh/km
-  Back-calculated from FIA declared energy budgets and typical race distances.
+Field energy consumption: ~0.57 kWh/km (upper bound)
+  The Gen 2 pack is 54 kWh and races run roughly 95 km, so net draw can't exceed ~0.57 kWh/km.
+  (Corrected 2026-10-21; the previous 1.8 kWh/km would need ~170 kWh per race.)
   Used as the baseline when circuit-specific telemetry is unavailable.
 
 MODELING HONESTY FRAMEWORK

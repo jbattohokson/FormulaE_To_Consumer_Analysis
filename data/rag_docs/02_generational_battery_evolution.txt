@@ -42,7 +42,7 @@ Gen 2 design lesson: pack size is the primary range lever
 
 Gen 3 pack: 38.5 kWh — smaller pack, more efficient use
 Gen 3 regen: front (250 kW) + rear (350 kW) = 600 kW combined peak
-Gen 3 recovery ratio: approximately 22% of consumed energy recovered per lap
+Gen 3 recovery ratio: more than 40% of race energy comes from regenerative braking (FIA)
 Gen 3 design lesson: regen architecture can partially substitute for pack size
 
 This generational shift — from "bigger pack" to "smarter recovery" — is the central technical

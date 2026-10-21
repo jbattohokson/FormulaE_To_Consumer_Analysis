@@ -122,13 +122,18 @@ MAX_ITERATIONS      = 8
 # These are used as fallback estimates when live telemetry or SQLite data is absent 
 # so the pipeline always produces directional output rather than failing silently.
 # Gen3 front + rear regen figures are from the FIA homologation spec; the field energy
-# consumption of ~1.8 kWh/km is back-calculated from published race energy budgets.
+# consumption is bounded by the pack size and race distance (see field_energy_kwh_per_km).
 ENGINEERED_PROXIES: dict[str, float] = {
     "gen2_regen_efficiency":    0.18,   # 18% recovery Gen2 single rear-motor architecture
     "gen3_front_regen_kw":    250.0,    # Front axle motor peak recovery power (Gen3 homologated)
     "gen3_rear_regen_kw":     350.0,    # Rear axle motor peak recovery power (Gen3 homologated)
-    "gen3_recovery_ratio":      0.22,   # Assumed 22% of consumed energy recovered per lap (Gen3)
-    "field_energy_kwh_per_km":  1.8,    # Field-average energy draw, back-calculated from FIA budgets
+    # AUDITED 2026-10-21: was 0.22. The FIA says more than 40% of the energy a Gen3 car
+    # uses in a race comes from regenerative braking (fiaformulae.com, "GEN3 facts").
+    "gen3_recovery_ratio":      0.40,
+    # AUDITED 2026-10-21: was 1.8 kWh/km, which would need ~170 kWh for a ~95 km race.
+    # The Gen2 pack is 54 kWh, so net draw can't exceed ~0.57 kWh/km (54 / ~95 km).
+    # Rough upper bound, not a measured figure.
+    "field_energy_kwh_per_km":  0.57,
 }
 
 # Lucid Motors consumer benchmarks sourced from EPA ratings cited in Technical Report §6.3.
@@ -137,13 +142,15 @@ ENGINEERED_PROXIES: dict[str, float] = {
 # Gravity SUV: next platform; included to show the product line the racing R&D feeds into.
 LUCID_BENCHMARKS: dict[str, dict] = {
     "Air Sapphire": {
-        "epa_range_mi":       687,
+        # AUDITED 2026-10-21: was 687, which is the Sapphire's range in KILOMETRES.
+        # EPA range is 427 mi (2025 model year).
+        "epa_range_mi":       427,
         "battery_kwh":        118.0,
         "cell_density_wh_kg": 300.0,
         "powertrain":         "Tri-Motor AWD",
         "peak_power_kw":      920,
         "segment":            "Performance",
-        "note":               "Range leader -- density over regen recovery optimization",
+        "note":               "Performance flagship -- trades range for power (Grand Touring is the range leader)",
     },
     "Air Grand Touring": {
         "epa_range_mi":       516,
@@ -554,50 +561,74 @@ def seed_dimensions() -> None:
 # _build_stints() generates plausible race records using documented outcomes (grid positions,
 # race results, DNF rates) combined with engineered proxies for energy metrics. The random
 # seed is deterministic per season so results are reproducible a deliberate data quality
-# decision. Every metric derived from this layer is labeled "documented_outcomes_estimated_telemetry"
+# decision. Every metric derived from this layer is labeled "simulated_seeded"
 # in the data_source column so the provenance is always queryable.
 
 def _build_stints(season: int, gen_id: int) -> list[dict]:
-    """Simulate one stint record per driver per race. Random seed is deterministic per season."""
+    """Simulate one stint record per driver per race. Random seed is deterministic per season.
+
+    AUDITED 2026-10-21: the old simulation gave every driver in a race a different lap count
+    (the winner could do 39 laps and P11 48), shuffled the finishing order independently of
+    pace, always put the same team on pole, and still gave DNFs a finishing position ahead
+    of finishers. It's still simulated data, but now internally consistent:
+      * one race distance (lap count) per race; finishers complete it, DNFs stop early
+      * grid order follows qualifying pace (average pace + noise)
+      * finishing order = laps completed, then total race time
+    No team effect is planted: every manufacturer draws from the same distributions, so any
+    "ranking" of teams on this data is noise. tests/test_fe2c.py checks the metrics recover
+    an effect when one is planted.
+    """
     random.seed(season * 42)
-    # base_year = 2013 + season keeps dates inside the Open-Meteo historical archive.
-    base_year = 2013 + season
+    # Season N runs over the winter into calendar year 2014 + N (season 9 = 2022-23, racing
+    # mostly in 2023). This was 2013 + N, which dated every race a year early, before its own
+    # season started, so the weather lookup fetched the wrong year. Day 15 is a placeholder.
+    base_year = 2014 + season
     stints: list[dict] = []
 
     for race in SEASON_CALENDAR.get(season, SEASON_CALENDAR[8]):
-        race_date   = f"{base_year}-{str(race['month_offset']).zfill(2)}-15"
-        track_id    = race["track_id"]
-        finish_pool = list(range(1, N_DRIVERS + 1))
-        random.shuffle(finish_pool)
+        race_date = f"{base_year}-{str(race['month_offset']).zfill(2)}-15"
+        track_id  = race["track_id"]
+        track_len = TRACK_LENGTH.get(track_id, 2.5)
+        race_laps = random.randint(38, 48)
 
-        for pos_idx, (manufacturer_id, (driver_name, team_name)) in enumerate(ALL_DRIVERS):
-            avg_lap     = TRACK_BASE_LAP.get(track_id, 65.0) + random.gauss(0, 1.5)
-            fastest_lap = avg_lap - random.uniform(0.3, 1.2)
-            total_laps  = random.randint(38, 48)
-            track_len   = TRACK_LENGTH.get(track_id, 2.5)
-            race_dist   = round(total_laps * track_len, 3)
-            avg_vel     = round(race_dist / (total_laps * avg_lap / 3600), 2)
-            lap_var     = round(abs(random.gauss(0, 0.8)) + 0.2, 4)
-            eer_proxy   = round(race_dist / (avg_lap * lap_var), 4)
-            classified  = 1 if random.random() > 0.08 else 0
+        drivers = []
+        for manufacturer_id, (driver_name, team_name) in ALL_DRIVERS:
+            avg_lap    = TRACK_BASE_LAP.get(track_id, 65.0) + random.gauss(0, 1.5)
+            classified = 1 if random.random() > 0.08 else 0
+            laps       = race_laps if classified else random.randint(1, race_laps - 1)
+            drivers.append({
+                "manufacturer_id": manufacturer_id, "driver_name": driver_name, "team_name": team_name,
+                "avg_lap": avg_lap, "fastest_lap": avg_lap - random.uniform(0.3, 1.2),
+                "lap_var": round(abs(random.gauss(0, 0.8)) + 0.2, 4),
+                "quali": avg_lap + random.gauss(0, 0.6),
+                "classified": classified, "laps": laps,
+                "dnf_reason": None if classified else random.choice(["Mechanical", "Accident", "Penalty"]),
+            })
+        for grid, d in enumerate(sorted(drivers, key=lambda d: d["quali"]), start=1):
+            d["grid"] = grid
+        finish_order = sorted(drivers, key=lambda d: (-d["laps"], d["laps"] * d["avg_lap"]))
+        for finish, d in enumerate(finish_order, start=1):
+            d["finish"] = finish
 
+        for d in drivers:
+            race_dist = round(d["laps"] * track_len, 3)
             stints.append({
-                "manufacturer_id": manufacturer_id, "track_id": track_id,
+                "manufacturer_id": d["manufacturer_id"], "track_id": track_id,
                 "gen_id": gen_id, "weather_id": None,
                 "season": season, "race_round": race["round"],
                 "race_name": race["race_name"], "race_date": race_date,
-                "driver_name": driver_name, "team_name": team_name,
-                "grid_position": pos_idx + 1, "finish_position": finish_pool[pos_idx],
-                "positions_gained": (pos_idx + 1) - finish_pool[pos_idx],
-                "total_laps": total_laps, "fastest_lap_sec": round(fastest_lap, 3),
-                "avg_lap_sec": round(avg_lap, 3), "race_distance_km": race_dist,
-                "avg_lap_velocity_kmh": avg_vel, "lap_time_variance": lap_var,
-                "eer_proxy": eer_proxy, "regen_opportunity_index": None,
-                "fe2c_efficiency_score": None, "classified": classified,
-                "dnf_reason": None if classified else random.choice(
-                    ["Mechanical", "Accident", "Penalty"]),
+                "driver_name": d["driver_name"], "team_name": d["team_name"],
+                "grid_position": d["grid"], "finish_position": d["finish"],
+                "positions_gained": d["grid"] - d["finish"],
+                "total_laps": d["laps"], "fastest_lap_sec": round(d["fastest_lap"], 3),
+                "avg_lap_sec": round(d["avg_lap"], 3), "race_distance_km": race_dist,
+                "avg_lap_velocity_kmh": round(race_dist / (d["laps"] * d["avg_lap"] / 3600), 2),
+                "lap_time_variance": d["lap_var"],
+                "eer_proxy": round(race_dist / (d["avg_lap"] * d["lap_var"]), 4),
+                "regen_opportunity_index": None, "fe2c_efficiency_score": None,
+                "classified": d["classified"], "dnf_reason": d["dnf_reason"],
                 "rag_context_flag": None,
-                "data_source": "documented_outcomes_estimated_telemetry",
+                "data_source": "simulated_seeded",
             })
     return stints
 
@@ -993,10 +1024,14 @@ def compute_efficiency_metrics(conn: sqlite3.Connection) -> None:
     vel_norm = df.groupby("gen_name")["avg_lap_velocity_kmh"].transform(
         lambda s: (s - s.min()) / (s.max() - s.min() + 1e-9)
     )
-    df["raw_fe2c"] = (
-        (df["race_distance_km"] / df["eer_proxy"].clip(lower=1e-6)) * 0.70
-        + vel_norm * 0.30
+    # AUDITED 2026-10-21: this used race_distance / eer_proxy, which simplifies to
+    # avg_lap_sec * lap_time_variance: an energy COST. Slow, erratic stints scored as the
+    # most "efficient". eer_proxy is the efficiency term (higher = more distance per unit
+    # of energy cost), so it's normalised within the generation and used directly.
+    eer_norm = df.groupby("gen_name")["eer_proxy"].transform(
+        lambda s: (s - s.min()) / (s.max() - s.min() + 1e-9)
     )
+    df["raw_fe2c"] = eer_norm * 0.70 + vel_norm * 0.30
 
     def minmax(s: pd.Series) -> pd.Series:
         lo, hi = s.min(), s.max()
@@ -1034,7 +1069,7 @@ def compute_efficiency_metrics(conn: sqlite3.Connection) -> None:
 # layer (Technical Report §4.3) but SQL-in-Python is sufficient for a single-file project.
 
 def run_quality_checks(conn: sqlite3.Connection) -> dict:
-    """Ten targeted QA assertions. Returns summary dict; prints PASS/FAIL per check."""
+    """Twelve targeted QA assertions. Returns summary dict; prints PASS/FAIL per check."""
     checks = []
 
     def check(name: str, query: str) -> None:
@@ -1066,6 +1101,14 @@ def run_quality_checks(conn: sqlite3.Connection) -> dict:
           "SELECT COUNT(*) FROM race_stints WHERE fastest_lap_sec >= avg_lap_sec")
     check("regen_index populated",
           "SELECT COUNT(*) FROM race_stints WHERE regen_opportunity_index IS NULL AND classified=1")
+    # Added 2026-10-21: the old simulation broke both of these and every check still passed
+    check("finishers complete the same race distance",
+          "SELECT COUNT(*) FROM (SELECT season, race_round FROM race_stints WHERE classified=1 "
+          "GROUP BY season, race_round HAVING COUNT(DISTINCT total_laps) > 1)")
+    check("no DNF classified ahead of a finisher",
+          "SELECT COUNT(*) FROM race_stints d JOIN race_stints f "
+          "ON d.season=f.season AND d.race_round=f.race_round "
+          "WHERE d.classified=0 AND f.classified=1 AND d.finish_position < f.finish_position")
 
     failed = sum(1 for c in checks if c["status"] == "FAIL")
     print(f"  {len(checks) - failed}/{len(checks)} checks passed.")
@@ -1077,13 +1120,13 @@ def run_quality_checks(conn: sqlite3.Connection) -> dict:
 #
 #   1. Racing efficiency ranking: manufacturers ranked by FE2C score with 95% CI,
 #      frontier classification (Efficiency Frontier / Fast Low Regen / etc.), and
-#      Lucid chain tagging. This is the primary evidence table for the thesis.
+#      focus-team (Mahindra) tagging. This is the primary evidence table for the thesis.
 #
 #   2. CA market penetration: EV registration share by brand and county, contrasting
 #      the Bay Area (dense regen) with the inland corridor (thermal stress). Lucid's
 #      share in tech-affluent ZIPs like Atherton is the consumer market signal.
 #
-#   3. Range transfer simulation: bootstrapped estimate of how Lucid/Mahindra's Gen 3
+#   3. Range transfer simulation: bootstrapped estimate of how Mahindra's Gen 3
 #      regen index advantage translates to real-world range uplift on the Air Sapphire,
 #      Grand Touring, and Gravity. Uses 1,000 bootstrap resamples for a 95% CI so the
 #      uncertainty is quantified, not hidden.
@@ -1136,6 +1179,9 @@ def compute_racing_efficiency(conn: sqlite3.Connection) -> pd.DataFrame:
     ).reset_index()
 
     agg["fe2c_score_ci95"] = (1.96 * agg["std_fe2c_score"] / np.sqrt(agg["total_stints"])).round(2)
+    # Is the ranking more than noise? Kruskal-Wallis across manufacturers' stint scores.
+    groups = [g["fe2c_efficiency_score"].to_numpy() for _, g in df.groupby("manufacturer_name")]
+    agg["ranking_kruskal_p"] = round(float(stats.kruskal(*groups).pvalue), 4) if len(groups) > 1 else np.nan
     agg["efficiency_rank"] = agg["avg_fe2c_score"].rank(ascending=False).astype(int)
 
     vel_avg, regen_avg = agg["avg_velocity"].mean(), agg["avg_regen_index"].mean()
@@ -1188,6 +1234,35 @@ def compute_ca_market_penetration(conn: sqlite3.Connection) -> pd.DataFrame:
     return result
 
 
+def range_transfer(focus_regen: np.ndarray, field_regen: np.ndarray,
+                   baseline_mi: float = None, n_boot: int = 1000, seed: int = 42) -> dict:
+    """Transfer factor, simulated range and a bootstrap CI for the focus team vs the field.
+
+    AUDITED 2026-10-21: both copies of this (Week 3 report and the agent tool) bootstrapped
+    only the field, held the focus team's mean fixed, and clipped the transfer factor at 0.
+    So the "95% CI" could never include a range LOSS and was far too narrow: with p = 0.25
+    it still excluded the 410 mi baseline. Now both groups are resampled and a negative
+    transfer is allowed (clipped to [-1, 2] only to keep the range positive).
+    """
+    baseline_mi = LUCID_AIR_EPA_RANGE if baseline_mi is None else baseline_mi
+    focus_regen, field_regen = np.asarray(focus_regen, float), np.asarray(field_regen, float)
+    focus_mean, field_mean = focus_regen.mean(), field_regen.mean()
+    t_stat, p_val = stats.ttest_ind(focus_regen, field_regen, equal_var=False)
+    factor = float(np.clip((focus_mean - field_mean) / max(field_mean, 1e-9), -1.0, 2.0))
+    rng = np.random.default_rng(seed)
+    f_boot = focus_regen[rng.integers(0, len(focus_regen), (n_boot, len(focus_regen)))].mean(axis=1)
+    b_boot = field_regen[rng.integers(0, len(field_regen), (n_boot, len(field_regen)))].mean(axis=1)
+    boot_factors = np.clip((f_boot - b_boot) / np.maximum(b_boot, 1e-9), -1.0, 2.0)
+    boot_ranges = baseline_mi * (1 + boot_factors * REGEN_WEIGHT)
+    return {
+        "focus_mean": float(focus_mean), "field_mean": float(field_mean),
+        "transfer_factor": factor,
+        "simulated_range_mi": float(baseline_mi * (1 + factor * REGEN_WEIGHT)),
+        "ci_lo": float(np.percentile(boot_ranges, 2.5)), "ci_hi": float(np.percentile(boot_ranges, 97.5)),
+        "t_stat": float(t_stat), "p_value": float(p_val),
+    }
+
+
 def compute_range_simulation(conn: sqlite3.Connection) -> dict:
     """
     Estimate Lucid Air real-world range using FE regen performance as a transfer proxy.
@@ -1216,18 +1291,11 @@ def compute_range_simulation(conn: sqlite3.Connection) -> dict:
     if len(lucid_regen) == 0 or len(field_regen) == 0:
         return {"error": "Insufficient data for comparison."}
 
-    lucid_mean      = lucid_regen.mean()
-    field_mean      = field_regen.mean()
-    t_stat, p_val   = stats.ttest_ind(lucid_regen, field_regen, equal_var=False)
-    transfer_factor = float(np.clip((lucid_mean - field_mean) / max(field_mean, 1e-9), 0, 2.0))
-    sim_range       = LUCID_AIR_EPA_RANGE * (1 + transfer_factor * REGEN_WEIGHT)
-
-    np.random.seed(42)
-    boot_idx     = np.random.choice(len(field_regen), size=(1000, len(field_regen)), replace=True)
-    boot_means   = field_regen[boot_idx].mean(axis=1)
-    boot_factors = np.clip((lucid_mean - boot_means) / np.maximum(boot_means, 1e-9), 0, 2.0)
-    boot_ranges  = LUCID_AIR_EPA_RANGE * (1 + boot_factors * REGEN_WEIGHT)
-    ci_lo, ci_hi = float(np.percentile(boot_ranges, 2.5)), float(np.percentile(boot_ranges, 97.5))
+    rt = range_transfer(lucid_regen, field_regen)
+    lucid_mean, field_mean = rt["focus_mean"], rt["field_mean"]
+    t_stat, p_val = rt["t_stat"], rt["p_value"]
+    transfer_factor, sim_range = rt["transfer_factor"], rt["simulated_range_mi"]
+    ci_lo, ci_hi = rt["ci_lo"], rt["ci_hi"]
 
     lucid_fe2c = df.loc[lucid_mask,  "fe2c_efficiency_score"].mean()
     field_fe2c = df.loc[~lucid_mask, "fe2c_efficiency_score"].mean()
@@ -1259,7 +1327,7 @@ def print_week3_report(eff: pd.DataFrame, pen: pd.DataFrame, sim: dict) -> None:
         sig_label = "not significant (small sample)" if not sim["significant"] \
                     else "statistically significant"
         print(
-            f"\nBLUF: Lucid/Mahindra Gen3 regen index ({sim['lucid_avg_regen']:.4f}) vs "
+            f"\nBLUF: Mahindra Gen3 regen index ({sim['lucid_avg_regen']:.4f}) vs "
             f"field ({sim['field_avg_regen']:.4f}) yields a {sim['transfer_factor']*100:.1f}% "
             f"regen advantage. Applied to the Lucid Air EPA baseline of {sim['epa_baseline_mi']} mi, "
             f"simulated range = {sim['simulated_range_mi']} mi "
@@ -1277,9 +1345,13 @@ def print_week3_report(eff: pd.DataFrame, pen: pd.DataFrame, sim: dict) -> None:
         print(f"\nBLUF: Range simulation failed — {sim['error']}")
 
     print("\nRACING EFFICIENCY RANKING")
+    kp = eff["ranking_kruskal_p"].iloc[0] if "ranking_kruskal_p" in eff else np.nan
+    print(f"  Kruskal-Wallis across manufacturers: p = {kp:.3f}"
+          + ("  -> differences are NOT significant; the order is noise" if kp >= 0.05 else ""))
+    print("  (Race stints are simulated with no team effect, so no real ranking is expected.)")
     print(f"  {'Rank':<5} {'Manufacturer':<22} {'FE2C Score':>10} {'±CI95':>7} {'Regen Index':>12} {'Frontier'}")
     for _, row in eff.iterrows():
-        tag = "  [LUCID CHAIN]" if row["lucid_chain"] else ""
+        tag = "  [FOCUS TEAM]" if row["lucid_chain"] else ""
         print(f"  {int(row['efficiency_rank']):<5} {row['manufacturer_name']:<22} "
               f"{row['avg_fe2c_score']:>10.2f} {row['fe2c_score_ci95']:>7.2f} "
               f"{row['avg_regen_index']:>12.6f} {row['frontier_class']}{tag}")
@@ -1299,13 +1371,13 @@ def print_week3_report(eff: pd.DataFrame, pen: pd.DataFrame, sim: dict) -> None:
 
     if "error" not in sim:
         print(f"\nRANGE TRANSFER SIMULATION")
-        print(f"  Lucid/Mahindra Gen3 stints: {sim['n_lucid']}  |  Field Gen3 stints: {sim['n_field']}")
-        print(f"  Lucid avg regen:  {sim['lucid_avg_regen']:.6f}  |  Field avg regen: {sim['field_avg_regen']:.6f}")
+        print(f"  Mahindra Gen3 stints: {sim['n_lucid']}  |  Field Gen3 stints: {sim['n_field']}")
+        print(f"  Mahindra avg regen: {sim['lucid_avg_regen']:.6f}  |  Field avg regen: {sim['field_avg_regen']:.6f}")
         print(f"  Transfer factor:  {sim['transfer_factor']:.4f} ({sim['transfer_factor']*100:.1f}% advantage)")
         print(f"  Regen weight:     {REGEN_WEIGHT} (15% — conservative midpoint of real-world regen contribution)")
         print(f"  EPA baseline:     {sim['epa_baseline_mi']} mi")
         print(f"  Simulated range:  {sim['simulated_range_mi']} mi  (95% CI: {sim['ci_lo']}–{sim['ci_hi']} mi)")
-        print(f"  FE2C score — Lucid chain: {sim['lucid_fe2c_score']:.2f}  |  Field: {sim['field_fe2c_score']:.2f}")
+        print(f"  FE2C score — Mahindra: {sim['lucid_fe2c_score']:.2f}  |  Field: {sim['field_fe2c_score']:.2f}")
 
     # Consumer benchmark crosswalk: express the simulated range uplift across every
     # Lucid model so Week 3 answers "how does Gen3 racing translate to your driveway?"
@@ -1870,7 +1942,7 @@ def tool_range_simulation(args: dict) -> str:
         field_regen = df.loc[~lucid_mask, "regen_opportunity_index"].values
 
         if len(lucid_regen) == 0:
-            # No Lucid/Mahindra telemetry in this generation fall back to the
+            # No Mahindra telemetry in this generation fall back to the
             # engineered proxy recovery ratio from Technical Report §8 so the agent
             # can still return a directional estimate rather than an error.
             proxy = ENGINEERED_PROXIES["gen3_recovery_ratio"]
@@ -1878,7 +1950,7 @@ def tool_range_simulation(args: dict) -> str:
             transfer = max((proxy - baseline) / max(baseline, 1e-9), 0.0) * REGEN_WEIGHT
             sim = LUCID_AIR_EPA_RANGE * (1 + transfer)
             return (
-                f"[PROXY ESTIMATE — no Lucid/Mahindra stints in {gen_filter}]\n"
+                f"[PROXY ESTIMATE — no Mahindra stints in {gen_filter}]\n"
                 f"Engineered proxy (Technical Report §8):\n"
                 f"  Gen3 recovery ratio: {proxy:.0%}  |  Gen2 baseline: {baseline:.0%}\n"
                 f"  Estimated transfer factor: {transfer:.4f}\n"
@@ -1889,19 +1961,11 @@ def tool_range_simulation(args: dict) -> str:
         if len(field_regen) == 0:
             return "No field stints for comparison."
 
-        lucid_mean      = lucid_regen.mean()
-        field_mean      = field_regen.mean()
-        t_stat, p_val   = stats.ttest_ind(lucid_regen, field_regen, equal_var=False)
-        transfer_factor = float(np.clip((lucid_mean - field_mean) / max(field_mean, 1e-9), 0, 2.0))
-        sim_range       = LUCID_AIR_EPA_RANGE * (1 + transfer_factor * REGEN_WEIGHT)
-
-        np.random.seed(42)
-        boot_idx     = np.random.choice(len(field_regen), size=(1000, len(field_regen)), replace=True)
-        boot_means   = field_regen[boot_idx].mean(axis=1)
-        boot_factors = np.clip((lucid_mean - boot_means) / np.maximum(boot_means, 1e-9), 0, 2.0)
-        boot_ranges  = LUCID_AIR_EPA_RANGE * (1 + boot_factors * REGEN_WEIGHT)
-        ci_lo = float(np.percentile(boot_ranges, 2.5))
-        ci_hi = float(np.percentile(boot_ranges, 97.5))
+        rt = range_transfer(lucid_regen, field_regen)
+        lucid_mean, field_mean = rt["focus_mean"], rt["field_mean"]
+        t_stat, p_val = rt["t_stat"], rt["p_value"]
+        transfer_factor, sim_range = rt["transfer_factor"], rt["simulated_range_mi"]
+        ci_lo, ci_hi = rt["ci_lo"], rt["ci_hi"]
 
         lucid_fe2c = df.loc[lucid_mask,  "fe2c_efficiency_score"].mean()
         field_fe2c = df.loc[~lucid_mask, "fe2c_efficiency_score"].mean()
@@ -1909,9 +1973,9 @@ def tool_range_simulation(args: dict) -> str:
 
         return (
             f"FE2C Range Simulation ({gen_filter})\n\n"
-            f"Lucid chain teams: {teams}\n"
-            f"Lucid stints: {len(lucid_regen)}  |  Field stints: {len(field_regen)}\n\n"
-            f"Lucid avg regen:  {lucid_mean:.6f}\n"
+            f"Focus team: {teams}\n"
+            f"Mahindra stints: {len(lucid_regen)}  |  Field stints: {len(field_regen)}\n\n"
+            f"Mahindra avg regen: {lucid_mean:.6f}\n"
             f"Field avg regen:  {field_mean:.6f}\n"
             f"Transfer factor:  {transfer_factor:.4f} ({transfer_factor * 100:.1f}% regen advantage)\n"
             f"Regen weight:     {REGEN_WEIGHT} (15% — conservative real-world regen contribution)\n\n"
@@ -1920,7 +1984,7 @@ def tool_range_simulation(args: dict) -> str:
             f"95% Bootstrap CI:        {ci_lo:.1f} – {ci_hi:.1f} mi\n\n"
             f"t={t_stat:.3f}, p={p_val:.4f} "
             f"({'significant' if p_val < 0.05 else 'not significant'} at α=0.05)\n\n"
-            f"FE2C score — Lucid chain: {lucid_fe2c:.2f}  |  Field: {field_fe2c:.2f}\n\n"
+            f"FE2C score — Mahindra: {lucid_fe2c:.2f}  |  Field: {field_fe2c:.2f}\n\n"
             f"NOTE: regen_opportunity_index is a proxy (lap variance + elevation), "
             f"not live telemetry. Treat simulated range as directional."
         )
@@ -2089,7 +2153,7 @@ def tool_calculate_regen_index(args: dict) -> str:
             lines.append(f"[ {gen_name} | Pack: {pack_kwh} kWh ]")
             lines.append(f"  {'Rank':<5} {'Manufacturer':<22} {'Regen Ratio':>12} {'% of Leader':>12} {'FE2C Score':>11} {'Stints':>7}")
             for _, row in grp.nsmallest(top_n, "gen_rank").iterrows():
-                lucid_tag = " [LUCID CHAIN]" if "mahindra" in row["manufacturer_name"].lower() or "lucid" in row["manufacturer_name"].lower() else ""
+                lucid_tag = " [FOCUS TEAM]" if "mahindra" in row["manufacturer_name"].lower() or "lucid" in row["manufacturer_name"].lower() else ""
                 lines.append(
                     f"  {int(row['gen_rank']):<5} {row['manufacturer_name']:<22}"
                     f" {row['regen_index_ratio']:>12.6f} {row['pct_of_leader']:>11.1f}%"
@@ -2109,7 +2173,7 @@ def tool_calculate_regen_index(args: dict) -> str:
             transfer_pct = float(np.clip((lucid_ratio - field_ratio) / max(field_ratio, 1e-9), 0, 2.0)) * REGEN_WEIGHT * 100
 
             lines.append("Gen3 Efficiency Curve vs. Lucid Consumer Benchmarks")
-            lines.append(f"  Lucid/Mahindra regen ratio advantage: {lucid_ratio:.6f} vs field {field_ratio:.6f}")
+            lines.append(f"  Mahindra regen ratio advantage: {lucid_ratio:.6f} vs field {field_ratio:.6f}")
             lines.append(f"  Estimated real-world range uplift (15% regen weight): +{transfer_pct:.1f}%")
             lines.append("")
             lines.append(f"  {'Model':<20} {'EPA Range':>10} {'Simulated Range':>16} {'Battery kWh':>12} {'Segment'}")
@@ -2344,7 +2408,7 @@ TOOLS: dict[str, tuple[Any, dict]] = {
         {
             "name": "get_range_simulation",
             "description": (
-                "Bootstrapped Lucid Air range simulation: models how Lucid/Mahindra's "
+                "Bootstrapped Lucid Air range simulation: models how Mahindra's "
                 "Formula E regen performance translates to estimated real-world range. "
                 "Returns simulated range with 95% CI."
             ),
@@ -2407,10 +2471,10 @@ record in this database is a data point in a multi-season study of how teams con
 electrochemical energy into mechanical advantage and what that discipline teaches us about
 building better consumer EVs.
 
-Lucid Motors is the direct line of transfer. As powertrain supplier to the Mahindra Formula E
-team, Lucid occupies a rare position: the same engineering team that optimizes regen recovery
-and thermal management under race conditions also designs the Air Sapphire's 300 Wh/kg cell
-architecture. This project quantifies that transfer.
+Lucid Motors is the link. Its Atieva division built the spec battery used by EVERY Gen2 car
+(2018-19 to 2021-22), and since 2023 Lucid has supplied the Gen3 front drive unit, again to every
+team. So Formula E has no "Lucid vs non-Lucid" team comparison; Mahindra is tracked as a focus
+team only. Race stints in this database are SIMULATED (seeded), so say so whenever you cite them.
 
 You have eight tools:
   calculate_regen_index          — Section 2 implementation: regen ratio ranked by gen cohort,
@@ -2441,7 +2505,7 @@ Operating rules:
 - The regen_opportunity_index is a proxy derived from lap variance and elevation change —
   not live telemetry. Always acknowledge this limitation in final answers.
 - When comparing Gen3 racing to Lucid consumer specs, use the benchmark crosswalk from
-  calculate_regen_index: Air Sapphire (687 mi EPA, 300 Wh/kg), Grand Touring (516 mi EPA)."""
+  calculate_regen_index: Air Sapphire (427 mi EPA, 300 Wh/kg), Grand Touring (516 mi EPA)."""
 
 
 # Agent: preflight and the tool-use loop
@@ -2566,7 +2630,7 @@ def run_agent(question: str, verbose: bool = True) -> str:
 DEMO_QUESTIONS = [
     (
         "Which manufacturer had the highest average FE2C efficiency score in Gen3, "
-        "and how does Lucid/Mahindra's regen index compare to the rest of the field?"
+        "and how does Mahindra's regen index compare to the rest of the field?"
     ),
     (
         "How does the Gen3 efficiency curve compare to a Lucid Air Sapphire? "

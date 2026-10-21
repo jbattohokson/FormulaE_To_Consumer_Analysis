@@ -14,9 +14,12 @@ that discipline teach us about battery technology at scale?
 
 The FE2C framework treats Formula E as a live laboratory for battery and energy systems R&D,
 where competitive pressure compresses development cycles that would otherwise take years in
-consumer contexts. Lucid Motors represents a direct line of transfer: having supplied powertrain
-technology to the Mahindra Formula E team, Lucid occupies a rare position as both racing supplier
-and consumer EV manufacturer.
+consumer contexts. Lucid Motors represents a direct line of transfer: it is both a Formula E
+supplier and a consumer EV manufacturer.
+Lucid's Formula E role (corrected 2026-10-21): its Atieva division built the spec battery
+used by every Gen 2 car (2018-19 to 2021-22), and since 2023 Lucid has supplied the Gen 3
+front drive unit, also to every team. It was never a Mahindra-specific supplier, so there is
+no Lucid vs non-Lucid team comparison inside Formula E.
 
 CORE PROJECT QUESTIONS
 

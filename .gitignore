@@ -14,3 +14,4 @@ data/week3_outputs/*.csv
 
 # Secrets
 .env
+data/raw/

@@ -8,10 +8,13 @@ transfer in the EV industry. The company's battery architecture reflects design 
 would be recognizable to any Formula E engineer: maximizing energy density, managing heat
 aggressively, and building modular systems for scalability.
 
-As powertrain supplier to the Mahindra Formula E team, Lucid occupies a unique position: the
-same engineering team that optimizes regen recovery and thermal management under race
-conditions also designs the Air Sapphire's 300 Wh/kg cell architecture. This dual role is the
-primary evidence for the FE2C thesis — racing R&D directly funds consumer product development.
+Lucid's Formula E role (corrected 2026-10-21): its Atieva division built the spec battery
+used by every Gen 2 car (2018-19 to 2021-22), and since 2023 Lucid has supplied the Gen 3
+front drive unit, also to every team. It was never a Mahindra-specific supplier, so there is
+no Lucid vs non-Lucid team comparison inside Formula E.
+The same company that engineered race hardware under Formula E's energy cap also designs the
+Air's battery architecture. That dual role is the premise of the FE2C thesis; what specifically
+transferred, and when, is not public.
 
 CORE TECHNICAL HIGHLIGHTS — LUCID BATTERY ARCHITECTURE
 
@@ -33,7 +36,8 @@ modular pack philosophy used in Formula E supplier-customer relationships.
 LUCID CONSUMER VEHICLE BENCHMARKS
 
 Lucid Air Sapphire:
-- EPA range: 687 miles (range leader in its segment)
+- EPA range: 427 miles (687 km). The Sapphire is the performance flagship; the Air Grand
+  Touring (516 mi) is the range leader.
 - Battery: 118 kWh usable
 - Cell density: 300 Wh/kg
 - Powertrain: Tri-Motor AWD, 1,234 hp peak

@@ -86,16 +86,16 @@
 <section id="summary" class="exec-summary">
   <h2>Summary</h2>
   <p>Formula E races run under a hard energy cap, so every race is effectively a battery management test. I wanted to know whether that racing work could tell California EV buyers something useful: does a bigger pack (energy density) or better regen (recovery efficiency) matter more where they drive?</p>
-  <p>The answer needs data that doesn't exist publicly, so I built the system first. It has a SQLite star schema for race and registration data, a ChromaDB store of technical documentation, and a Claude agent with 8 custom tools that answers questions across both. Ten data quality checks run on every load, and all ten pass.</p>
+  <p>The answer needs data that doesn't exist publicly, so I built the system first. It has a SQLite star schema for race and registration data, a ChromaDB store of technical documentation, and a Claude agent with 8 custom tools that answers questions across both. Twelve data quality checks run on every load, and all twelve pass. They include two added in the October 2026 audit, after the old simulation was found giving drivers in the same race different lap counts and ranking DNFs ahead of finishers while every check still passed.</p>
   <p>Race outcomes are generated from a seeded simulation so results are reproducible, and the CA DMV feed currently returns a 2018 snapshot. The pipeline is built so real stint data can replace the simulated layer without changing anything downstream.</p>
 </section>
 <div class="kpi-strip">
   <div class="kpi"><div class="num blue">3 layers</div><div class="label">SQLite star schema, ChromaDB vector store, Claude tool-use agent</div></div>
   <div class="kpi"><div class="num good">8</div><div class="label">Custom agent tools: efficiency scoring, regen indexing, CA market simulation</div></div>
-  <div class="kpi"><div class="num amber">10</div><div class="label">Python data quality checks, all passing on every run</div></div>
+  <div class="kpi"><div class="num amber">12</div><div class="label">Python data quality checks, all passing on every run</div></div>
   <div class="kpi"><div class="num blue">7 stages</div><div class="label">Orchestrated pipeline from schema seed to agent-ready database</div></div>
   <div class="kpi"><div class="num good">1 + 4</div><div class="label">Fact table (race stints) plus 4 dimension tables</div></div>
-  <div class="kpi"><div class="num amber">Gen 1-3</div><div class="label">Formula E battery generations modeled in the hardware dimension</div></div>
+  <div class="kpi"><div class="num amber">Gen 1-3</div><div class="label">Formula E battery generations in the hardware dimension (stints cover Gen 2 and Gen 3)</div></div>
 </div>
 <section id="architecture" class="section">
   <p class="section-label">System Architecture</p>
@@ -113,13 +113,13 @@
   <div class="finding">
     <div class="finding-header"><span class="finding-number">M1</span><span class="finding-title">Delta-E: efficient battery management vs. expensive position gains</span></div>
     <div class="finding-body">
-      <p>Delta-E compares estimated energy used with positions gained per stint, calculated with SQL window functions against the race average. A negative score means a driver gained places while using less energy than average. A positive score means the places cost more energy than average.</p>
+      <p>Delta-E is a stint's energy-cost proxy (1 / EER proxy, where EER = race distance / (average lap x lap-time variance)) minus that race's average. A negative score means a driver used less energy than the field in that race. A positive score means more.</p>
     </div>
   </div>
   <div class="finding">
     <div class="finding-header"><span class="finding-number">M2</span><span class="finding-title">FE2C Efficiency Score: comparing across battery generations</span></div>
     <div class="finding-body">
-      <p>FE2C Efficiency Score = (Race Distance / Energy Used) x (Average Lap Velocity), normalized across generations using declared battery capacity and adjusted for track aggression from the track dimension.</p>
+      <p>FE2C Efficiency Score = 70% x EER proxy + 30% x average lap velocity, each min-max normalized within its battery generation, then scaled 0 to 100. The October 2026 audit found the old formula was inverted: it divided distance by the EER proxy, which rewarded slow, erratic stints as the most efficient. A test now plants a more efficient team in synthetic data and checks that it ranks first.</p>
       <div class="impact-block amber"><p class="impact-label">Assumption</p><p>Normalizing Gen 2 against Gen 3 requires assumptions about how capacity differences map to comparable efficiency. Those assumptions are documented in the pipeline code and its data quality checks.</p></div>
     </div>
   </div>
@@ -138,7 +138,7 @@
   <div class="data-table-wrap"><table><thead><tr><th>Layer</th><th>Tool</th></tr></thead><tbody>
     <tr><td>Pipeline orchestration</td><td>Python, 7-stage run_pipeline() function</td></tr>
     <tr><td>Database</td><td>SQLite star schema (race_stints fact + 4 dimensions)</td></tr>
-    <tr><td>Data quality</td><td>10 Python assertions (zero-sum positions, valid grid range, orphaned keys, formula accuracy)</td></tr>
+    <tr><td>Data quality</td><td>12 Python assertions (zero-sum positions, valid grid range, orphaned keys, formula accuracy, one race distance per race, no DNF ahead of a finisher)</td></tr>
     <tr><td>Vector store</td><td>ChromaDB, Formula E and Lucid technical documentation</td></tr>
     <tr><td>Agent</td><td>Claude API tool use, 8 custom tools</td></tr>
     <tr><td>CA market simulation</td><td>Python, ZIP-code weighted density vs. recovery recommendation</td></tr>
@@ -151,7 +151,7 @@
     <div class="finding-header"><span class="finding-number" style="background:var(--amber)">L</span><span class="finding-title">Three things to keep in mind</span></div>
     <div class="finding-body">
       <p><strong>1. Race outputs come from simulated data.</strong> Efficiency scores and Delta-E values describe the simulated dataset. They show that the pipeline and metrics work, not how real teams performed.</p>
-      <p><strong>2. The Lucid technology-transfer angle is a case study premise.</strong> It's based on public reporting about Lucid's motorsport work. What actually transferred, and when, isn't public.</p>
+      <p><strong>2. The Lucid technology-transfer angle is a case study premise.</strong> Lucid's Atieva division built the spec battery for every Gen 2 car (2018-19 to 2021-22), and since 2023 Lucid has supplied the Gen 3 front drive unit, also to every team. Because every team ran Lucid hardware, there's no Lucid vs. non-Lucid comparison inside Formula E; the pipeline tracks Mahindra as a focus team only. What actually transferred to Lucid's road cars, and when, isn't public.</p>
       <p><strong>3. The California recommendation is a weighted framework, not a demand model.</strong> It uses registration density and environmental factors. Validating it would need real buyer data from each region.</p>
       <div class="impact-block green"><p class="impact-label">Next step</p><p>Replace the simulated stint layer with real race results and timing data, keeping the same schema, so the data quality checks and agent tools run unchanged on real inputs.</p></div>
     </div>

@@ -17,3 +17,4 @@ anthropic>=0.34.0
 #           python3 fe2c.py --ingest     # build the ChromaDB vector store
 #           export ANTHROPIC_API_KEY=sk-ant-...
 #           python3 fe2c.py --demo       # 5 built-in showcase questions
+pytest>=8.0.0
