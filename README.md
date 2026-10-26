@@ -6,7 +6,7 @@ A single-file data engineering pipeline plus agentic RAG system that treats Form
 
 ## Architecture — three layers, run in order
 
-1. **Data pipeline (ETL)** — builds a SQLite star schema from Formula E race results, Open-Meteo weather, and California DMV EV registration data. Computes three original efficiency metrics (`regen_opportunity_index`, `fe2c_efficiency_score`, `delta_e`).
+1. **Data pipeline (ETL)**: builds a SQLite star schema from simulated Formula E race stints (640 stints over 5 seasons, generated with a fixed seed so every run matches), Open-Meteo weather, and live California DMV EV registration data. Computes three original efficiency metrics (`regen_opportunity_index`, `fe2c_efficiency_score`, `delta_e`).
 2. **RAG vector store** — chunks and embeds the project's own technical write-up plus sourced Wikipedia reference material into ChromaDB, so the agent cites the project's actual research instead of general model knowledge.
 3. **Agentic RAG (Claude)** — an 8-tool agent (SQLite queries, semantic search, efficiency comparisons, range simulation, cold-start prediction, regen index ranking, CA market data, strategy recommendation) with prompt caching on the system prompt and tool schemas.
 
